@@ -1,8 +1,14 @@
+import os
 import telebot
 from telebot import types
 
-TOKEN = "8583278824:AAGyTKKTBzJdihSVrrWpQPwacZ6r2-qwMoA"
-ADMIN_ID = 6590246089   # @Sa1dahh ID si
+# ================== RAILWAY UCHUN ENV VARIABLES ==================
+TOKEN = os.getenv('8583278824:AAGyTKKTBzJdihSVrrWpQPwacZ6r2-qwMoA')
+ADMIN_ID = int(os.getenv('6590246089'))
+
+if not TOKEN or not ADMIN_ID:
+    print("❌ XATO: TOKEN yoki ADMIN_ID topilmadi!")
+    exit(1)
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -23,10 +29,7 @@ def start(message):
 *Aqida* guruhiga xush kelibsiz.
 
 💳 To'lov uchun karta:
-       Ashur.A
 `5614 6816 2097 9942`
-
-Quyidagi tartibda ma'lumot bering:
 
 1. Ism va Familiyangizni to'liq yozing:"""
     
@@ -61,23 +64,20 @@ def handle_text(message):
         markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
         markup.add(types.KeyboardButton("📱 Kontaktni ulashish", request_contact=True))
         
-        bot.send_message(chat_id, "3. *Kontakt ma'lumotingizni ulashing* (telefon raqamingiz bilan)", 
+        bot.send_message(chat_id, "3. *Kontakt ma'lumotingizni ulashing*", 
                         reply_markup=markup, parse_mode='Markdown')
 
 
-# ================== KONTAKT QABUL QILISH ==================
+# ================== KONTAKT ==================
 @bot.message_handler(content_types=['contact'])
 def handle_contact(message):
     chat_id = message.chat.id
-    
-    if chat_id not in user_states or user_states[chat_id] != 'contact':
+    if user_states.get(chat_id) != 'contact':
         return
 
     contact = message.contact
     user_info[chat_id]['phone'] = contact.phone_number
-    user_info[chat_id]['contact_name'] = contact.first_name
 
-    # Kontakt tugmasini yashiramiz
     bot.send_message(chat_id, "✅ Kontakt qabul qilindi.", reply_markup=types.ReplyKeyboardRemove())
     
     user_states[chat_id] = 'file'
@@ -88,8 +88,7 @@ def handle_contact(message):
 @bot.message_handler(content_types=['photo', 'document'])
 def handle_file(message):
     chat_id = message.chat.id
-    
-    if chat_id not in user_states or user_states[chat_id] != 'file':
+    if user_states.get(chat_id) != 'file':
         return
 
     file_id = message.photo[-1].file_id if message.photo else message.document.file_id
@@ -100,7 +99,6 @@ def handle_file(message):
 
     user_states[chat_id] = 'month'
 
-    # 12 ta oy tugmalari
     markup = types.InlineKeyboardMarkup(row_width=3)
     for month in months:
         markup.add(types.InlineKeyboardButton(month, callback_data=f"month_{month}"))
@@ -117,13 +115,12 @@ def month_selected(call):
     user_info[chat_id]['month'] = selected_month
 
     bot.answer_callback_query(call.id, f"{selected_month} tanlandi")
-    bot.send_message(chat_id, "✅ *Qabul qilindi!* Tekshirilib sizga javob yuboriladi.", parse_mode='Markdown')
+    bot.send_message(chat_id, "✅ *Qabul qilindi!* Tekshirilib javob yuboriladi.", parse_mode='Markdown')
     
     send_to_admin(chat_id)
     user_states.pop(chat_id, None)
 
 
-# ================== ADMINGA YUBORISH ==================
 # ================== ADMINGA YUBORISH ==================
 def send_to_admin(user_chat_id):
     data = user_info[user_chat_id]
@@ -141,17 +138,14 @@ def send_to_admin(user_chat_id):
     markup.add(types.InlineKeyboardButton("✅ Qabul qilish", callback_data=f"approve_{user_chat_id}"))
     markup.add(types.InlineKeyboardButton("❌ Rad etish", callback_data=f"reject_{user_chat_id}"))
     
-    # Foydalanuvchi bilan bog'lanish tugmasi
     if data.get('username') and data['username'] != "yo'q":
         markup.add(types.InlineKeyboardButton(
             "💬 Foydalanuvchi bilan bog'lanish", 
             url=f"https://t.me/{data['username']}"
         ))
     else:
-        # Username bo'lmasa tugma qo'shilmaydi, lekin ID aniq ko'rsatiladi
-        caption += f"\n\n⚠️ Foydalanuvchida username yo'q.\nU bilan bog'lanish uchun yuqoridagi User ID dan foydalaning."
+        caption += f"\n\n⚠️ Username yo'q. User ID: {data['user_id']}"
 
-    # Faylni yuborish
     if data.get('receipt_type') == "photo":
         bot.send_photo(ADMIN_ID, data['receipt'], caption=caption, parse_mode=None, reply_markup=markup)
     else:
@@ -172,5 +166,5 @@ def callback_handler(call):
         bot.answer_callback_query(call.id, "Rad etildi")
 
 
-print("✅ Bot yangi versiyada ishga tushdi...")
+print("✅ Aqida Bot Railway da ishga tushdi...")
 bot.infinity_polling()
