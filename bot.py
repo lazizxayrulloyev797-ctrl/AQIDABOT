@@ -5,8 +5,8 @@ from telebot import types, util
 
 # 🚨 Xatolikni oldini oluvchi o'zgaruvchilar
 try:
-    BOT_TOKEN = os.environ["8583278824:AAGyTKKTBzJdihSVrrWpQPwacZ6r2-qwMoA"]
-    ADMIN_ID = int(os.environ["6590246089"])
+    BOT_TOKEN = os.environ["BOT_TOKEN"]
+    ADMIN_ID = int(os.environ["ADMIN_ID"])
 except KeyError as e:
     raise SystemExit(f"❌ Environment variable topilmadi: {e}. Railway sozlamalarida BOT_TOKEN va ADMIN_ID ni kiriting!")
 except ValueError:
