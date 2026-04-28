@@ -1,11 +1,10 @@
 import os
-import logging
 import telebot
-from telebot import types, util
+from telebot import types
 
-# ==================== SOZLAMALAR ====================
+# ==================== ENVIRONMENT VARIABLES ====================
 try:
-    BOT_TOKEN = os.environ["BOT_TOKEN"]
+    TOKEN = os.environ["BOT_TOKEN"]
     ADMIN_ID = int(os.environ["ADMIN_ID"])
 except KeyError as e:
     print(f"❌ Xatolik: {e} topilmadi!")
@@ -15,268 +14,244 @@ except ValueError:
     print("❌ ADMIN_ID faqat raqam bo'lishi kerak!")
     exit(1)
 
-bot = telebot.TeleBot(BOT_TOKEN)
-user_data = {}
+bot = telebot.TeleBot(TOKEN)
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+user_states = {}
+user_info = {}
 
-# ==================== KOMANDALAR ====================
+months = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun", 
+          "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"]
+
 
 @bot.message_handler(commands=['start'])
-def cmd_start(message):
-    cid = message.chat.id
-    user_data[cid] = {'step': 'contact'}
+def start(message):
+    chat_id = message.chat.id
+    user_states[chat_id] = 'name'
     
-    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-    markup.add(types.KeyboardButton("📞 Kontakt ulashish", request_contact=True))
+    text = """👋 *Assalomu alaykum!*
+
+*Aqida* guruhiga xush kelibsiz.
+
+💳 To'lov uchun karta:
+       Ashur.A
+`5614 6816 2097 9942`
+
+Quyidagi tartibda ma'lumot bering:
+
+1. Ism va Familiyangizni to'liq yozing:"""
     
-    text = (
-        "Iltimos avval shartlar bilan tanishib chiqing!\n\n"
-        "💳 Karta raqam: 5614681620979942\n\n"
-        "Boshlash uchun pastdagi tugma orqali kontaktingizni ulashing:"
-    )
-    bot.send_message(cid, text, reply_markup=markup)
+    bot.send_message(chat_id, text, parse_mode='Markdown')
 
-# ==================== KONTAKT ====================
 
+# ================== MATNLI JAVOBLAR ==================
+@bot.message_handler(content_types=['text'])
+def handle_text(message):
+    chat_id = message.chat.id
+    if chat_id not in user_states:
+        return
+
+    state = user_states[chat_id]
+
+    if state == 'name':
+        if len(message.text.strip().split()) < 2:
+            bot.send_message(chat_id, "❗ *Iltimos, Ism va Familiyangizni to'liq yozing!*", parse_mode='Markdown')
+            return
+        user_info[chat_id] = {
+            'full_name': message.text.strip(),
+            'user_id': message.from_user.id,
+            'username': message.from_user.username or "yo'q"
+        }
+        user_states[chat_id] = 'group'
+        bot.send_message(chat_id, "2. *Guruhizni to'liq ravishda kiriting*", parse_mode='Markdown')
+
+    elif state == 'group':
+        user_info[chat_id]['group'] = message.text.strip()
+        user_states[chat_id] = 'contact'
+        
+        markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+        markup.add(types.KeyboardButton("📱 Kontaktni ulashish", request_contact=True))
+        
+        bot.send_message(chat_id, "3. *Kontakt ma'lumotingizni ulashing* (telefon raqamingiz bilan)", 
+                        reply_markup=markup, parse_mode='Markdown')
+
+
+# ================== KONTAKT QABUL QILISH ==================
 @bot.message_handler(content_types=['contact'])
 def handle_contact(message):
-    cid = message.chat.id
-    if user_data.get(cid, {}).get('step') != 'contact':
+    chat_id = message.chat.id
+    
+    if chat_id not in user_states or user_states[chat_id] != 'contact':
         return
-    
-    user_data[cid]['phone'] = message.contact.phone_number
-    user_data[cid]['username'] = message.from_user.username
-    user_data[cid]['first_name'] = message.from_user.first_name or ""
-    user_data[cid]['step'] = 'name'
-    
-    bot.send_message(
-        cid,
-        "✅ Kontakt qabul qilindi.\n\n1️⃣ Ism familiyangizni to'liq kiriting:",
-        reply_markup=types.ReplyKeyboardRemove()
-    )
 
-# ==================== ISM FAMILIYA ====================
+    contact = message.contact
+    user_info[chat_id]['phone'] = contact.phone_number
+    user_info[chat_id]['contact_name'] = contact.first_name
 
-@bot.message_handler(func=lambda m: user_data.get(m.chat.id, {}).get('step') == 'name')
-def handle_name(message):
-    cid = message.chat.id
-    text = message.text.strip()
+    # Kontakt tugmasini yashiramiz
+    bot.send_message(chat_id, "✅ Kontakt qabul qilindi.", reply_markup=types.ReplyKeyboardRemove())
     
-    if len(text.split()) < 2:
-        bot.reply_to(message, "⚠️ Iltimos, ism va familiyani to'liq yozing!\n\nMasalan: Ali Valiyev")
+    user_states[chat_id] = 'file'
+    bot.send_message(chat_id, "4. *To'lov chekini yuboring* (rasm, PDF yoki boshqa fayl)", parse_mode='Markdown')
+
+
+# ================== FILE (Chek) ==================
+@bot.message_handler(content_types=['photo', 'document'])
+def handle_file(message):
+    chat_id = message.chat.id
+    
+    if chat_id not in user_states or user_states[chat_id] != 'file':
         return
-    
-    user_data[cid]['name'] = text
-    user_data[cid]['step'] = 'group'
-    bot.reply_to(message, "2️⃣ Guruhingizni to'liq ravishda kiriting:")
 
-# ==================== GURUH ====================
+    file_id = message.photo[-1].file_id if message.photo else message.document.file_id
+    file_type = "photo" if message.photo else "document"
 
-@bot.message_handler(func=lambda m: user_data.get(m.chat.id, {}).get('step') == 'group')
-def handle_group(message):
-    cid = message.chat.id
-    user_data[cid]['group'] = message.text.strip()
-    user_data[cid]['step'] = 'receipt'
-    bot.reply_to(message, "3️⃣ To'lov chekini yuboring (rasm, PDF yoki boshqa fayl):")
+    user_info[chat_id]['receipt'] = file_id
+    user_info[chat_id]['receipt_type'] = file_type
 
-# ==================== CHEK ====================
+    user_states[chat_id] = 'month'
 
-@bot.message_handler(content_types=['photo', 'document'], func=lambda m: user_data.get(m.chat.id, {}).get('step') == 'receipt')
-def handle_receipt(message):
-    cid = message.chat.id
-    
-    if message.photo:
-        file_id = message.photo[-1].file_id
-        file_type = 'photo'
-    elif message.document:
-        file_id = message.document.file_id
-        file_type = 'document'
-    else:
-        bot.reply_to(message, "⚠️ Iltimos, rasm yoki fayl yuboring!")
-        return
-    
-    user_data[cid]['receipt_id'] = file_id
-    user_data[cid]['receipt_type'] = file_type
-    user_data[cid]['step'] = 'month'
-    
-    # 12 oy tugmalari
+    # 12 ta oy tugmalari
     markup = types.InlineKeyboardMarkup(row_width=3)
-    months = [
-        "Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun",
-        "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"
-    ]
-    buttons = [types.InlineKeyboardButton(m, callback_data=f"month_{m}") for m in months]
-    markup.add(*buttons)
+    for month in months:
+        markup.add(types.InlineKeyboardButton(month, callback_data=f"month_{month}"))
     
-    bot.send_message(cid, "4️⃣ Qaysi oy uchun to'lov qilyapsiz?", reply_markup=markup)
+    bot.send_message(chat_id, "5. *Qaysi oy uchun to'lov qilyapsiz?*", reply_markup=markup, parse_mode='Markdown')
 
-# ==================== OY TANLASH ====================
 
+# ================== OY TANLASH ==================
 @bot.callback_query_handler(func=lambda call: call.data.startswith("month_"))
-def handle_month(call):
-    cid = call.message.chat.id
-    
-    if cid not in user_data or user_data[cid].get('step') != 'month':
-        bot.answer_callback_query(call.id, "⚠️ Eskirgan tugma. /start ni bosing.")
-        return
-    
-    month = call.data.replace("month_", "")
-    user_data[cid]['month'] = month
-    user_data[cid]['step'] = 'waiting'
-    
-    bot.answer_callback_query(call.id)
-    bot.edit_message_text(
-        "✅ Qabul qilindi. Tekshirilib, sizga javob yuboriladi.",
-        cid,
-        call.message.message_id
-    )
-    
-    send_to_admin(cid)
+def month_selected(call):
+    chat_id = call.message.chat.id
+    selected_month = call.data.split("_")[1]
 
-# ==================== ADMINGA YUBORISH ====================
+    user_info[chat_id]['month'] = selected_month
 
-def send_to_admin(cid):
-    data = user_data.get(cid)
-    if not data:
-        logging.error(f"User {cid} uchun ma'lumot topilmadi")
-        return
+    bot.answer_callback_query(call.id, f"{selected_month} tanlandi")
+    bot.send_message(chat_id, "✅ *Qabul qilindi!* Tekshirilib sizga javob yuboriladi.", parse_mode='Markdown')
     
-    # HTML xavfsiz qilish
-    safe_name = util.escape_html(data.get('name', 'N/A'))
-    safe_group = util.escape_html(data.get('group', 'N/A'))
-    safe_month = util.escape_html(data.get('month', 'N/A'))
-    safe_phone = util.escape_html(data.get('phone', 'N/A'))
-    username = data.get('username', '').strip()
+    send_to_admin(chat_id)
+    user_states.pop(chat_id, None)
+
+
+# ================== ADMINGA YUBORISH ==================
+def send_to_admin(user_chat_id):
+    data = user_info[user_chat_id]
     
-    caption = (
-        f"🔔 <b>Yangi to'lov so'rovi!</b>\n\n"
-        f"👤 Ism familiya: {safe_name}\n"
-        f"📞 Telefon: +{safe_phone}\n"
-        f"📚 Guruh: {safe_group}\n"
-        f"📅 To'lov oyi: {safe_month}\n"
-        f"🆔 User ID: <code>{cid}</code>\n\n"
-        f"Chekni tekshiring va javob bering."
-    )
+    caption = f"""🔔 YANGI TO'LOV SO'ROVI
+
+👤 Foydalanuvchi: {data['full_name']}
+🔗 Username: @{data['username']}
+📱 Telefon: {data.get('phone', 'Berilmagan')}
+👥 Guruh: {data['group']}
+📅 Oy: {data['month']}
+🆔 User ID: {data['user_id']}"""
+
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup.add(types.InlineKeyboardButton("✅ Qabul qilish", callback_data=f"approve_{user_chat_id}"))
+    markup.add(types.InlineKeyboardButton("❌ Rad etish", callback_data=f"reject_{user_chat_id}"))
     
-    # Tugmalar
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    markup.add(
-        types.InlineKeyboardButton("✅ Tasdiqlash", callback_data=f"approve_{cid}"),
-        types.InlineKeyboardButton("❌ Rad etish", callback_data=f"reject_{cid}")
-    )
-    
-    # Username tugmasi (faqat mavjud bo'lsa)
-    if username and len(username) > 0:
-        markup.add(
-            types.InlineKeyboardButton("📞 Bog'lanish", url=f"https://t.me/{username}")
-        )
-    
-    # Yuborish (xatoliklarga chidamli)
+    # Foydalanuvchi bilan bog'lanish tugmasi (xatoliklarga chidamli)
+    if data.get('username') and data['username'] != "yo'q":
+        try:
+            markup.add(types.InlineKeyboardButton(
+                "💬 Foydalanuvchi bilan bog'lanish", 
+                url=f"https://t.me/{data['username']}"
+            ))
+        except:
+            # Agar username xato bo'lsa, tugma qo'shilmaydi
+            caption += f"\n\n⚠️ Username xato. User ID: {data['user_id']}"
+    else:
+        caption += f"\n\n⚠️ Foydalanuvchida username yo'q.\nU bilan bog'lanish uchun yuqoridagi User ID dan foydalaning."
+
+    # Faylni yuborish (xatoliklarga chidamli)
     try:
-        if data['receipt_type'] == 'photo':
-            bot.send_photo(ADMIN_ID, data['receipt_id'], caption=caption, parse_mode='HTML', reply_markup=markup)
+        if data.get('receipt_type') == "photo":
+            bot.send_photo(ADMIN_ID, data['receipt'], caption=caption, parse_mode=None, reply_markup=markup)
         else:
-            bot.send_document(ADMIN_ID, data['receipt_id'], caption=caption, parse_mode='HTML', reply_markup=markup)
-        
-        logging.info(f"✅ Admin {ADMIN_ID} ga xabar yuborildi (User: {cid})")
+            bot.send_document(ADMIN_ID, data['receipt'], caption=caption, parse_mode=None, reply_markup=markup)
+        print(f"✅ Admin {ADMIN_ID} ga xabar yuborildi (User: {user_chat_id})")
     
     except telebot.apihelper.ApiTelegramException as e:
         error_msg = str(e)
-        logging.error(f"❌ Telegram API xatosi: {error_msg}")
+        print(f"❌ Telegram API xatosi: {error_msg}")
         
-        # Asosiy sabab: admin /start bosmagan
+        # Asosiy muammo: admin /start bosmagan
         if "bot can't initiate conversation" in error_msg.lower() or "forbidden" in error_msg.lower():
             bot.send_message(
-                cid,
+                user_chat_id,
                 "⚠️ Admin hali botga ulanmagan.\n"
                 "Ma'lumotlaringiz saqlandi, tez orada javob beriladi."
             )
-            logging.warning(f"🚨 Admin {ADMIN_ID} botga /start bosmagan!")
+            print(f"🚨 DIQQAT: Admin {ADMIN_ID} botga /start bosmagan!")
         
         # Username tugmasi muammosi
         elif "BUTTON_USER_PRIVACY_RESTRICTED" in error_msg or "BUTTON_URL_INVALID" in error_msg:
             # Tugmasiz qayta yuborish
-            markup_safe = types.InlineKeyboardMarkup(row_width=2)
-            markup_safe.add(
-                types.InlineKeyboardButton("✅ Tasdiqlash", callback_data=f"approve_{cid}"),
-                types.InlineKeyboardButton("❌ Rad etish", callback_data=f"reject_{cid}")
-            )
+            markup_safe = types.InlineKeyboardMarkup(row_width=1)
+            markup_safe.add(types.InlineKeyboardButton("✅ Qabul qilish", callback_data=f"approve_{user_chat_id}"))
+            markup_safe.add(types.InlineKeyboardButton("❌ Rad etish", callback_data=f"reject_{user_chat_id}"))
+            
             try:
-                if data['receipt_type'] == 'photo':
-                    bot.send_photo(ADMIN_ID, data['receipt_id'], caption=caption, parse_mode='HTML', reply_markup=markup_safe)
+                if data.get('receipt_type') == "photo":
+                    bot.send_photo(ADMIN_ID, data['receipt'], caption=caption, parse_mode=None, reply_markup=markup_safe)
                 else:
-                    bot.send_document(ADMIN_ID, data['receipt_id'], caption=caption, parse_mode='HTML', reply_markup=markup_safe)
-                logging.info("✅ Tugmasiz xabar yuborildi")
+                    bot.send_document(ADMIN_ID, data['receipt'], caption=caption, parse_mode=None, reply_markup=markup_safe)
+                print("✅ Tugmasiz xabar yuborildi")
             except Exception as retry_error:
-                logging.error(f"❌ Qayta urinishda xato: {retry_error}")
-                bot.send_message(cid, "⚠️ Texnik xatolik. Iltimos, keyinroq urinib ko'ring.")
+                print(f"❌ Qayta urinishda ham xatolik: {retry_error}")
+                bot.send_message(user_chat_id, "⚠️ Texnik xatolik. Admin bilan bog'laning.")
         else:
-            bot.send_message(cid, "⚠️ Xatolik yuz berdi. Admin bilan bog'laning.")
+            bot.send_message(user_chat_id, "⚠️ Xatolik yuz berdi. Keyinroq urinib ko'ring.")
     
     except Exception as e:
-        logging.error(f"❌ Kutilmagan xatolik: {e}")
-        bot.send_message(cid, "⚠️ Texnik xatolik. /start dan qayta boshlang.")
+        print(f"❌ Kutilmagan xatolik: {e}")
+        bot.send_message(user_chat_id, "⚠️ Texnik xatolik. /start dan qayta boshlang.")
 
-# ==================== ADMIN JAVOBI ====================
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith(("approve_", "reject_")))
-def handle_admin_decision(call):
+# ================== ADMIN CALLBACK ==================
+@bot.callback_query_handler(func=lambda call: True)
+def callback_handler(call):
     # Faqat admin ruxsati
     if call.from_user.id != ADMIN_ID:
         bot.answer_callback_query(call.id, "⛔ Siz admin emassiz!", show_alert=True)
         return
     
-    action, cid_str = call.data.split("_", 1)
-    try:
-        cid = int(cid_str)
-    except:
-        bot.answer_callback_query(call.id, "❌ Noto'g'ri ma'lumot")
-        return
-    
-    if action == "approve":
+    if call.data.startswith("approve_"):
+        user_id = int(call.data.split("_")[1])
         try:
-            bot.send_message(cid, "🎉 Tabriklaymiz! Siz qabul qilindingiz.\n\nTo'lovingiz tasdiqlandi.")
-            bot.edit_message_caption(
-                caption=call.message.caption + "\n\n✅ <b>Tasdiqlandi</b>",
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id,
-                parse_mode='HTML'
-            )
-            bot.answer_callback_query(call.id, "✅ Foydalanuvchi tasdiqlandi!")
-            logging.info(f"✅ User {cid} tasdiqlandi")
+            bot.send_message(user_id, "🎉 *Tabriklaymiz!* Siz qabul qilindingiz.", parse_mode='Markdown')
+            bot.answer_callback_query(call.id, "✅ Qabul qilindi")
+            # Caption yangilash
+            try:
+                bot.edit_message_caption(
+                    caption=call.message.caption + "\n\n✅ QABUL QILINDI",
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id
+                )
+            except:
+                pass
         except Exception as e:
-            logging.error(f"Tasdiqlashda xato: {e}")
-            bot.answer_callback_query(call.id, "⚠️ Xatolik yuz berdi")
-    
-    elif action == "reject":
+            bot.answer_callback_query(call.id, f"⚠️ Xatolik: {e}")
+
+    elif call.data.startswith("reject_"):
+        user_id = int(call.data.split("_")[1])
         try:
-            bot.send_message(
-                cid,
-                "❌ To'lovingiz rad etildi.\n\n"
-                "Ma'lumotlarni tekshirib qayta yuboring yoki admin bilan bog'laning."
-            )
-            bot.edit_message_caption(
-                caption=call.message.caption + "\n\n❌ <b>Rad etildi</b>",
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id,
-                parse_mode='HTML'
-            )
-            bot.answer_callback_query(call.id, "❌ Foydalanuvchi rad etildi!")
-            logging.info(f"❌ User {cid} rad etildi")
+            bot.send_message(user_id, "❌ To'lov rad etildi. Iltimos, ma'lumotlarni tekshirib qayta yuboring.", parse_mode='Markdown')
+            bot.answer_callback_query(call.id, "❌ Rad etildi")
+            # Caption yangilash
+            try:
+                bot.edit_message_caption(
+                    caption=call.message.caption + "\n\n❌ RAD ETILDI",
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id
+                )
+            except:
+                pass
         except Exception as e:
-            logging.error(f"Rad etishda xato: {e}")
-            bot.answer_callback_query(call.id, "⚠️ Xatolik yuz berdi")
-    
-    # Xotirani tozalash
-    if cid in user_data:
-        del user_data[cid]
+            bot.answer_callback_query(call.id, f"⚠️ Xatolik: {e}")
 
-# ==================== ISHGA TUSHIRISH ====================
 
+# ================== ISHGA TUSHIRISH ====================
 if __name__ == "__main__":
     print("=" * 50)
     print("✅ Bot ishga tushdi!")
@@ -285,5 +260,7 @@ if __name__ == "__main__":
     
     try:
         bot.infinity_polling(timeout=60, long_polling_timeout=60)
+    except KeyboardInterrupt:
+        print("\n⛔ Bot to'xtatildi")
     except Exception as e:
-        logging.error(f"❌ Bot to'xtadi: {e}")
+        print(f"❌ Xatolik: {e}")
