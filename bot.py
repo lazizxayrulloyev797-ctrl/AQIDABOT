@@ -32,13 +32,19 @@ def start(message):
 
 *Aqida* guruhiga xush kelibsiz.
 
-💳 To'lov uchun karta:
-       Ashur.A
-`5614 6816 2097 9942`
+💳 *To'lov uchun kartalar:*
+
+1️⃣ Uzcard:
+    Ashur.A
+    `5614 6816 2097 9942`
+
+2️⃣ Visa:
+    Hayitova X
+    `4067 0700 0383 2248`
 
 Quyidagi tartibda ma'lumot bering:
 
-1. Ism va Familiyangizni to'liq yozing:"""
+1️⃣ Ism va Familiyangizni to'liq yozing:"""
     
     bot.send_message(chat_id, text, parse_mode='Markdown')
 
@@ -62,7 +68,7 @@ def handle_text(message):
             'username': message.from_user.username or "yo'q"
         }
         user_states[chat_id] = 'group'
-        bot.send_message(chat_id, "2. *Guruhizni to'liq ravishda kiriting*", parse_mode='Markdown')
+        bot.send_message(chat_id, "2️⃣ *Qaysi guruhga qo'shilmoqchisiz?*", parse_mode='Markdown')
 
     elif state == 'group':
         user_info[chat_id]['group'] = message.text.strip()
@@ -71,7 +77,7 @@ def handle_text(message):
         markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
         markup.add(types.KeyboardButton("📱 Kontaktni ulashish", request_contact=True))
         
-        bot.send_message(chat_id, "3. *Kontakt ma'lumotingizni ulashing* (telefon raqamingiz bilan)", 
+        bot.send_message(chat_id, "3️⃣ *Kontakt ma'lumotingizni ulashing* (telefon raqamingiz bilan)", 
                         reply_markup=markup, parse_mode='Markdown')
 
 
@@ -91,7 +97,7 @@ def handle_contact(message):
     bot.send_message(chat_id, "✅ Kontakt qabul qilindi.", reply_markup=types.ReplyKeyboardRemove())
     
     user_states[chat_id] = 'file'
-    bot.send_message(chat_id, "4. *To'lov chekini yuboring* (rasm, PDF yoki boshqa fayl)", parse_mode='Markdown')
+    bot.send_message(chat_id, "4️⃣ *To'lov chekini yuboring* (rasm, PDF yoki boshqa fayl)", parse_mode='Markdown')
 
 
 # ================== FILE (Chek) ==================
@@ -115,7 +121,7 @@ def handle_file(message):
     for month in months:
         markup.add(types.InlineKeyboardButton(month, callback_data=f"month_{month}"))
     
-    bot.send_message(chat_id, "5. *Qaysi oy uchun to'lov qilyapsiz?*", reply_markup=markup, parse_mode='Markdown')
+    bot.send_message(chat_id, "5️⃣ *Qaysi oy uchun to'lov qilyapsiz?*", reply_markup=markup, parse_mode='Markdown')
 
 
 # ================== OY TANLASH ==================
